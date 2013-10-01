@@ -38,7 +38,9 @@ public class Main extends Activity
 
 	// Alarm manager variables;
 	AlarmManager _alarm;
+	AlarmManager _uploadAlarm;
 	PendingIntent _pintent;
+	PendingIntent _uploadPIntent;
 
 	// Start off logging service, retrieve interval etc.
 	@Override
@@ -118,6 +120,17 @@ public class Main extends Activity
 		_pintent = PendingIntent.getService(Main.this, 0, intent, 0);
 		_alarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
 		_alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), _interval * 1000, _pintent);
+
+		//
+
+		// set the upload to go off once every 24 hours TODO:Currently set to 5
+		// mins
+		// Intent upintent = new Intent(this, UploadService.class);
+		// _uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
+		// _uploadAlarm = (AlarmManager)
+		// getSystemService(Context.ALARM_SERVICE);
+		// _alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
+		// 300000, _uploadPIntent);
 
 		//
 		// // Start the service to log and scan for wifiPoints
