@@ -33,7 +33,7 @@ public class Main extends Activity
 	// private Thread _serverUploadThread;
 	// private boolean _running = false;
 	// Recievers
-	private StepReceiver mStepreceived;
+	// private StepReceiver mStepreceived;
 	private AccessPointRec mAPRec;
 
 	// Alarm manager variables;
@@ -125,19 +125,14 @@ public class Main extends Activity
 
 		// set the upload to go off once every 24 hours TODO:Currently set to 5
 		// mins
-		// Intent upintent = new Intent(this, UploadService.class);
-		// _uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
-		// _uploadAlarm = (AlarmManager)
-		// getSystemService(Context.ALARM_SERVICE);
-		// _alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
-		// 300000, _uploadPIntent);
+		Intent upintent = new Intent(this, UploadService.class);
+		_uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
+		_uploadAlarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+		_alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), 300000, _uploadPIntent);
 
-		//
-		// // Start the service to log and scan for wifiPoints
-		// Intent startIntent = new Intent(this, WifiScannerService.class);
-		// startIntent.putExtra("INTERVAL_TIME", _interval);
-		// startService(startIntent);
-		// logRunning.setText("Logging...");
+		// TODO:
+		// Perhaps suspend the other alarm when upload is on - and then
+		// re-enable when it returns init :)
 
 		// Start the Step Counting
 		// startService(new Intent(this, StepCountService.class));

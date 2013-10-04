@@ -68,6 +68,9 @@ public class UploadService extends Service
 		if (connectToAP())
 			uploadToServer();
 
+		// /Make sure the network is forgotten
+		closeDownWifi();
+
 		return START_NOT_STICKY;
 	}
 
@@ -86,19 +89,18 @@ public class UploadService extends Service
 		_wifi_lock.acquire();
 		// connect to the Access point we want to connect to
 		// String SSID = "Wayward";
-		String SSID = "UoN-secure";
+		String SSID = "UoN-guest";
 		// TODO: There may also be a password string too String password="";
 
 		WifiConfiguration wifiConf = new WifiConfiguration();
 		// wifiConf.BSSID = "\"" + BSSID + "\"";
 		wifiConf.SSID = "\"" + SSID + "\""; // this needs to be in quotation
 											// marks
-
 		// wep network:
-		// conf.wepKeys[0] = "\"" + networkPass + "\"";
-		// conf.wepTxKeyIndex = 0;
-		// conf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
-		// conf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
+		// wifiConf.wepKeys[0] = "\"" + networkPass + "\"";
+		// wifiConf.wepTxKeyIndex = 0;
+		// wifiConf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+		// wifiConf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
 		//
 
 		// conf.preSharedKey = "\""+ networkPass +"\""; // WPA NETWORK
@@ -229,6 +231,7 @@ public class UploadService extends Service
 				outputStream.flush();
 				outputStream.close();
 
+				// If response is okay
 				if (serverResponseCode == 200)
 				{
 					// Put into the shared preferences that we have uploaded
@@ -261,6 +264,7 @@ public class UploadService extends Service
 				}
 
 				if (_wifi_lock != null)
+					;
 				{
 					_wifi_lock.release();
 				}
@@ -306,6 +310,13 @@ public class UploadService extends Service
 		editor.putLong("LAST_UPLOAD_TIME", currentTime);
 		editor.putBoolean("WAIT_FOR_RETRY", false);
 		editor.commit();
+
+	}
+
+	// Disconnect from the wifi network, and forget the config to avoid issues
+	// with the other service
+	private void closeDownWifi()
+	{
 
 	}
 
