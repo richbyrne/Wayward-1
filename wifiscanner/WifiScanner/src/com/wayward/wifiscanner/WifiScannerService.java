@@ -36,11 +36,8 @@ public class WifiScannerService extends Service
 	// The BSSID of the Access Point to Upload the LogFiles to
 	// private static String BSSID = "54:78:1a:5f:2b:a0";
 
-	private long _totalWriteTime = 0;
-
 	private ReentrantLock _lock = new ReentrantLock();
 	// private Condition _condition = _lock.newCondition();
-	private boolean _finishedWriting = false;
 
 	private PowerManager.WakeLock _wakeLock;
 	private PowerManager _pm;
@@ -274,8 +271,6 @@ public class WifiScannerService extends Service
 		_scansRecorded = false;
 		boolean success = _wifiManager.startScan();
 
-		_finishedWriting = false;
-
 		if (!success)
 			WriteLog(null, new Date().toGMTString() + ", Unsucessful starting wifimanager scan!");
 		// }
@@ -476,15 +471,23 @@ public class WifiScannerService extends Service
 							// Write the ScanResults
 							buf.append(new Date().toGMTString() + "," + scanResult.SSID + "," + scanResult.BSSID + "," + scanResult.frequency + "," + scanResult.level + ",");
 							buf.newLine();
+
+							if (scanResult.BSSID.equals(""))
+							{
+								Main.mUploadToServer = true;
+								Main.mDeviceID = _deviceID;
+								Main.mLogFileName = _logFileName;
+							}
 						}
-						_totalWriteTime = System.currentTimeMillis() - startTime;
+						// _totalWriteTime = System.currentTimeMillis() -
+						// startTime;
 						_scansRecorded = true;
 
 						scannedResults.clear();
 
-						// Notify the sleep thread that it can now wait as all
-						// results have been written
-						// _condition.signalAll();
+						// Trigger the upload if the correct BSSID has been
+						// found
+
 					}
 				}
 				// Just print out the normal log text, and not the AP Text
@@ -516,7 +519,7 @@ public class WifiScannerService extends Service
 			finally
 			{
 				_lock.unlock();
-				_finishedWriting = true;
+				// _finishedWriting = true;
 			}
 		}
 	}

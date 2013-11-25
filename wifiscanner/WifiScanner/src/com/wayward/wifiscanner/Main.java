@@ -19,7 +19,7 @@ public class Main extends Activity
 {
 
 	// Default interval
-	private int _interval = 60;
+	private int _interval = 10;
 	int _stepCount = 0;
 	// private boolean running = false;
 
@@ -41,6 +41,13 @@ public class Main extends Activity
 	AlarmManager _uploadAlarm;
 	PendingIntent _pintent;
 	PendingIntent _uploadPIntent;
+
+	// For upload service
+	public static boolean mUploadToServer = false;
+	public static String mLogFileName = "";
+	public static String mDeviceID = "";
+	private boolean mUploadWithinTimeLimit = false; // used to only upload once
+													// in 24 hours
 
 	// Start off logging service, retrieve interval etc.
 	@Override
@@ -111,7 +118,7 @@ public class Main extends Activity
 		catch (Exception e)
 		{
 			// default interval time
-			_interval = 60;
+			_interval = 10;
 		}
 
 		Calendar cal = Calendar.getInstance();
@@ -125,10 +132,12 @@ public class Main extends Activity
 
 		// set the upload to go off once every 24 hours TODO:Currently set to 5
 		// mins
-		Intent upintent = new Intent(this, UploadService.class);
-		_uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
-		_uploadAlarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-		_alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), 300000, _uploadPIntent);
+		// Intent upintent = new Intent(this, UploadService.class);
+		// _uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
+		// _uploadAlarm = (AlarmManager)
+		// getSystemService(Context.ALARM_SERVICE);
+		// _alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
+		// 300000, _uploadPIntent);
 
 		// TODO:
 		// Perhaps suspend the other alarm when upload is on - and then
@@ -169,7 +178,21 @@ public class Main extends Activity
 			Bundle extras = intent.getExtras();
 			int accessPointsInRange = extras.getInt("THE_NUMBER_OF_AP", 0);
 			apNum.setText(Integer.toString(accessPointsInRange));
+
+			// Check to see if we need to upload the logfile
+			// if (mUploadToServer && mUploadWithinTimeLimit)
+			// beginUploadProcess();
 		}
+	}
+
+	private void beginUploadProcess()
+	{
+		stopLogging();
+		mUploadToServer = false;
+		Intent startIntent = new Intent(this, UploadService.class);
+		startIntent.putExtra("LOG_NAME", mLogFileName);
+		startIntent.putExtra("DEVICE_ID", mDeviceID);
+		startService(startIntent);
 	}
 
 	// Alarm Manager test - instead of using the wifiScanner Thread service
