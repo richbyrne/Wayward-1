@@ -1,6 +1,7 @@
 package com.wayward.wifiscanner;
 
 import java.util.Calendar;
+import java.util.Date;
 
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -9,15 +10,18 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.TextView;
 
-public class Main extends Activity
+public class MainActivity extends Activity
 {
 
+	SharedPreferences sharedPrefs;
 	// Default interval
 	private int _interval = 10;
 	int _stepCount = 0;
@@ -49,12 +53,16 @@ public class Main extends Activity
 	private boolean mUploadWithinTimeLimit = false; // used to only upload once
 													// in 24 hours
 
+	boolean mScanning = false;
+
 	// Start off logging service, retrieve interval etc.
 	@Override
 	protected void onCreate(Bundle savedInstanceState)
 	{
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main_ui);
+
+		sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
 
 		// Link up checkbox and the scan interval number
 		logginEnabled = (CheckBox) findViewById(R.id.logginEnabled);
@@ -79,12 +87,6 @@ public class Main extends Activity
 					stopLogging();
 			}
 		});
-
-		// Set the checkbox on to make sure that as long as the apps running it
-		// will start
-
-		// logginEnabled.setChecked(true);
-
 	}
 
 	@Override
@@ -110,38 +112,29 @@ public class Main extends Activity
 	// startLogging
 	private void startLogging()
 	{
-		// Get the inerval value if already set when logging is turned on
-		try
+		if (!mScanning)
 		{
-			_interval = Integer.parseInt(scanInterval.getText().toString());
+			// Get the inerval value if already set when logging is turned on
+			try
+			{
+				_interval = Integer.parseInt(scanInterval.getText().toString());
+			}
+			catch (Exception e)
+			{
+				// default interval time
+				_interval = 10;
+			}
+
+			Calendar cal = Calendar.getInstance();
+			cal.add(Calendar.SECOND, 10);
+			Intent intent = new Intent(MainActivity.this, WifiScannerService.class);
+			_pintent = PendingIntent.getService(MainActivity.this, 0, intent, 0);
+			_alarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+			_alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), _interval * 1000, _pintent);
+			mScanning = true;
+			//
+
 		}
-		catch (Exception e)
-		{
-			// default interval time
-			_interval = 10;
-		}
-
-		Calendar cal = Calendar.getInstance();
-		cal.add(Calendar.SECOND, 10);
-		Intent intent = new Intent(Main.this, WifiScannerService.class);
-		_pintent = PendingIntent.getService(Main.this, 0, intent, 0);
-		_alarm = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-		_alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(), _interval * 1000, _pintent);
-
-		//
-
-		// set the upload to go off once every 24 hours TODO:Currently set to 5
-		// mins
-		// Intent upintent = new Intent(this, UploadService.class);
-		// _uploadPIntent = PendingIntent.getService(this, 0, upintent, 0);
-		// _uploadAlarm = (AlarmManager)
-		// getSystemService(Context.ALARM_SERVICE);
-		// _alarm.setRepeating(AlarmManager.RTC_WAKEUP, cal.getTimeInMillis(),
-		// 300000, _uploadPIntent);
-
-		// TODO:
-		// Perhaps suspend the other alarm when upload is on - and then
-		// re-enable when it returns init :)
 
 		// Start the Step Counting
 		// startService(new Intent(this, StepCountService.class));
@@ -149,11 +142,15 @@ public class Main extends Activity
 
 	private void stopLogging()
 	{
-		// stop the service and clean up
-		// stopService(new Intent(this, WifiScannerService.class));
-		// stopService(new Intent(this, StepCountService.class));
-		_alarm.cancel(_pintent);
-		logRunning.setText("Logging Stopped.");
+		if (mScanning)
+		{
+			mScanning = false;
+			// stop the service and clean up
+			stopService(new Intent(this, WifiScannerService.class));
+			// stopService(new Intent(this, StepCountService.class));
+			_alarm.cancel(_pintent);
+			logRunning.setText("Logging Stopped.");
+		}
 
 	}
 
@@ -180,19 +177,44 @@ public class Main extends Activity
 			apNum.setText(Integer.toString(accessPointsInRange));
 
 			// Check to see if we need to upload the logfile
+			mUploadWithinTimeLimit = timeDifference();
 			// if (mUploadToServer && mUploadWithinTimeLimit)
+			// waitForUploadToComplete();
 			// beginUploadProcess();
 		}
 	}
 
-	private void beginUploadProcess()
+	// private void beginUploadProcess()
+	private void waitForUploadToComplete()
 	{
 		stopLogging();
-		mUploadToServer = false;
-		Intent startIntent = new Intent(this, UploadService.class);
-		startIntent.putExtra("LOG_NAME", mLogFileName);
-		startIntent.putExtra("DEVICE_ID", mDeviceID);
-		startService(startIntent);
+		// mUploadToServer = false;
+		// mUploadWithinTimeLimit = false;
+
+		// // TODO - get upload file
+		// String logFile = mLogFileName;
+		//
+		// // Begin the file upload
+		// UploadToServer upload = new UploadToServer(logFile, this);
+		// boolean success = upload.startUpload();
+		// // if success then save the current time of the last upload
+		// if (success)
+		// {
+		// SharedPreferences.Editor editor = sharedPrefs.edit();
+		// long currentTime = new Date().getTime();
+		// editor.putLong("LAST_UPLOAD_TIME", currentTime);
+		// editor.commit();
+		// }
+
+		// Resume logging
+
+		// wait while uploading to the server
+		while (mUploadToServer)
+		{
+			if (!mUploadToServer)
+				break;
+		}
+		startLogging();
 	}
 
 	// Alarm Manager test - instead of using the wifiScanner Thread service
@@ -207,4 +229,43 @@ public class Main extends Activity
 		}
 	}
 
+	private boolean timeDifference()
+	{
+		long storedTime = 0;
+
+		storedTime = sharedPrefs.getLong("LAST_UPLOAD_TIME", 0);
+
+		long currentTime = new Date().getTime();
+
+		long difference = currentTime - storedTime;
+		int days = (int) (difference / (1000 * 60 * 60 * 24));
+		int hours = (int) ((difference - (1000 * 60 * 60 * 24 * days)) / (1000 * 60 * 60));
+		int min = (int) (difference - (1000 * 60 * 60 * 24 * days) - (1000 * 60 * 60 * hours)) / (1000 * 60);
+
+		// if last upload was over 24 hours ago
+		// if (hours >= 24)
+		if (min >= 1)
+		{
+			// Upload to server
+			return true;
+
+		}
+
+		return false;
+	}
+
+	@Override
+	public void onPause()
+	{
+		super.onPause();
+
+		unregisterReceiver(mAPRec);
+	}
+
+	@Override
+	public void onBackPressed()
+	{
+		super.onBackPressed();
+		// beginUploadProcess();
+	}
 }

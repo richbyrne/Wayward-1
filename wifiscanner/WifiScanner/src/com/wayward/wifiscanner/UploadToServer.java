@@ -1,39 +1,34 @@
 package com.wayward.wifiscanner;
 
-import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import android.app.Service;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
 import android.net.wifi.WifiManager.WifiLock;
-import android.os.Bundle;
 import android.os.Environment;
-import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
 //This service will push scanned logs to a server at timed intervals.
 
-public class UploadService extends Service
+public class UploadToServer
 {
 	// Used to name the file
 	String _deviceID = "";
-	// ServerURI
-	String _serverURI = "http://horizab1.miniserver.com/~richard/uploadToServer.php";
-	// "http://horizab1.miniserver.com/~richard/uploadToServer.php";
+	Context mContext;
+
+	String _serverURI = "http://192.168.42.1/uploadToServer.php";
 
 	// File path to grab the logfile from
 	final String logPath = Environment.getExternalStorageDirectory().getAbsolutePath();
@@ -41,44 +36,64 @@ public class UploadService extends Service
 	// TODO: logfile name - this needs to change to something more meaningful,
 	// maybe
 	// DevId_Log_date
-	private String _logFileName = "/wifi_Log.txt/";
+	private String mLogFileName = "/wifi_Log.txt/";
 
 	private WifiManager manager;
 	private WifiLock _wifi_lock;
 
-	@Override
-	public IBinder onBind(Intent intent)
+	// @Override
+	// public int onStartCommand(Intent intent, int flags, int startId)
+	public UploadToServer(String fileName, Context context)
 	{
-		return null;
+		mContext = context;
+		mLogFileName = fileName;
+
 	}
 
-	@Override
-	public int onStartCommand(Intent intent, int flags, int startId)
+	public boolean startUpload()
 	{
-		super.onStartCommand(intent, flags, startId);
+		boolean success = false;
+		try
+		{
+			String fullExternalPath = Environment.getExternalStorageDirectory().getAbsolutePath();
+			File dir = new File(fullExternalPath + "/WaitingForUpload/");
 
-		// TODO: Need to pass in the AP Name here so we know what to connect
-		// to/what credentials
+			if (connectToAP())
+			{
+				// for all the sub files in the folder
+				for (File child : dir.listFiles())
+				{
+					if (uploadToServer(child))
+						success = true;
+				}
+			}
+		}
 
-		Bundle myExtras = intent.getExtras();
-		_logFileName = myExtras.getString("LOG_NAME");
-		_deviceID = myExtras.getString("DEVICE_ID");
+		catch (Exception ex)
+		{
+			Log.d("ERROR", "NO FILES TO UPLOAD");
+			SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+			SharedPreferences.Editor editor = sharedPrefs.edit();
 
-		// connect to access point and upload if successful
-		if (connectToAP())
-			uploadToServer();
+			Log.d("UPDATING_UPLOAD_TIME", "No files in folder, so updating timestamp.");
+			long currentTime = new Date().getTime();
+			editor.putLong("LAST_UPLOAD_TIME", currentTime);
+			editor.commit();
+		}
+		finally
+		{
+			// /Make sure the network is forgotten
+			closeDownWifi();
+		}
 
-		// /Make sure the network is forgotten
-		closeDownWifi();
-
-		return START_NOT_STICKY;
+		return success;
 	}
 
 	private boolean connectToAP()
 	{
 		// Attempt to connect to access point and wait until we are connted
 		// (infinite while loop? - while disconnected)
-		manager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+		manager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
 		// If Wifi is on then turn it off
 		if (!manager.isWifiEnabled())
 		{
@@ -89,8 +104,7 @@ public class UploadService extends Service
 		_wifi_lock.acquire();
 		// connect to the Access point we want to connect to
 		// String SSID = "Wayward";
-		String SSID = "UoN-guest";
-		// TODO: There may also be a password string too String password="";
+		String SSID = "WAYWARD";
 
 		WifiConfiguration wifiConf = new WifiConfiguration();
 		// wifiConf.BSSID = "\"" + BSSID + "\"";
@@ -103,16 +117,13 @@ public class UploadService extends Service
 		// wifiConf.allowedGroupCiphers.set(WifiConfiguration.GroupCipher.WEP40);
 		//
 
-		// conf.preSharedKey = "\""+ networkPass +"\""; // WPA NETWORK
-
-		// Open Network
-		// wifiConf.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+		String networkPass = "wayw4rd1";
+		wifiConf.preSharedKey = "\"" + networkPass + "\""; // WPA NETWORK
 
 		// Add the configuration to the manager
 		manager.addNetwork(wifiConf);
 
 		// Connect to the correct network
-		// manager.setWifiEnabled(true);
 		// Get list of configs and connect to the one that we want
 		List<WifiConfiguration> list = manager.getConfiguredNetworks();
 		for (WifiConfiguration i : list)
@@ -146,8 +157,9 @@ public class UploadService extends Service
 	}
 
 	// Connect to the server and upload etc.
-	public void uploadToServer()
+	private boolean uploadToServer(File fileToUpload)
 	{
+		boolean success = false;
 		// Create and destroy all objects in here, keep it as self contained as
 		// it can be, no need to have trailing things
 
@@ -160,8 +172,8 @@ public class UploadService extends Service
 		String twoHyphens = "--";
 		String boundary = "*****";
 
-		String filePath = logPath + "/" + _logFileName;
-		File fileToUpload = new File(filePath);
+		// String filePath = logPath + "/" + mLogFileName;
+		// File fileToUpload = new File(filePath);
 
 		// Check the file actually exists
 		if (!fileToUpload.isFile())
@@ -198,9 +210,12 @@ public class UploadService extends Service
 				// connection.getOutputStream());
 				outputStream.writeBytes(twoHyphens + boundary + lineEnd);
 				Locale.getDefault();
-				SimpleDateFormat s = new SimpleDateFormat("dd-MM-yy_HH:mm:ss", Locale.getDefault());
-				String currentDateTime = s.format(new Date());
-				String serverFileName = fileToUpload + "_" + currentDateTime + ".txt";
+				// SimpleDateFormat s = new
+				// SimpleDateFormat("dd-MM-yy_HH:mm:ss", Locale.getDefault());
+				// String currentDateTime = s.format(new Date());
+				String serverFileName = fileToUpload.getName();// + "_" +
+																// currentDateTime
+				// + ".txt";
 				outputStream.writeBytes("Content-Disposition: form-data; name=\"uploadedfile\";filename=\"" + serverFileName + "\"" + lineEnd);
 				outputStream.writeBytes(lineEnd);
 
@@ -236,17 +251,22 @@ public class UploadService extends Service
 				{
 					// Put into the shared preferences that we have uploaded
 					// successfully, and don't need to for 24 hours
-					resetLogFile();
+					// resetLogFile();
+
+					// The file has been successfully uploaded so move it and
+					// reset it
+					Logger logger = new Logger(mContext);
+					logger.MoveAndReset(true);
+					success = true;
 				}
 
 			}
 			catch (Exception ex)
 			{
 				// Exception handling
-				Log.d("UPLOAD_ERROR", "Upload error: " + ex.toString());
+				Log.e("UPLOAD_ERROR", "Upload error: " + ex.toString());
 
-				SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-
+				SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(mContext);
 				SharedPreferences.Editor editor = sharedPrefs.edit();
 				editor.putBoolean("WAIT_FOR_RETRY", true);
 				editor.commit();
@@ -264,53 +284,13 @@ public class UploadService extends Service
 				}
 
 				if (_wifi_lock != null)
-					;
 				{
 					_wifi_lock.release();
 				}
 			}
 
 		}
-	}
-
-	private void resetLogFile()
-	{
-		// Logfile has uploaded and can be deleted, as well as letting other
-		// service know that we are waiting another 24 hours
-
-		File file = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), _logFileName);
-		// delete the file and make a clean fresh logFile
-		if (file.delete())
-		{
-			String logFilePath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + _logFileName;
-			File logFile = new File(logFilePath);
-			if (!logFile.exists())
-			{
-				try
-				{
-					// Create a new log file
-					logFile.createNewFile();
-
-					BufferedWriter buf = new BufferedWriter(new FileWriter(logFile, true));
-					buf.append("DeviceID: " + _deviceID);
-					buf.newLine();
-					buf.close();
-				}
-				catch (Exception ex)
-				{
-
-				}
-			}
-		}
-
-		// update shared preferences with new time
-		SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-		long currentTime = new Date().getTime();
-		SharedPreferences.Editor editor = sharedPrefs.edit();
-		editor.putLong("LAST_UPLOAD_TIME", currentTime);
-		editor.putBoolean("WAIT_FOR_RETRY", false);
-		editor.commit();
-
+		return success;
 	}
 
 	// Disconnect from the wifi network, and forget the config to avoid issues
@@ -318,11 +298,15 @@ public class UploadService extends Service
 	private void closeDownWifi()
 	{
 
-	}
+		ConnectivityManager connManager = (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo mWifi = connManager.getNetworkInfo(ConnectivityManager.TYPE_WIFI);
 
-	@Override
-	public void onDestroy()
-	{
-		super.onDestroy();
+		if (mWifi.isConnected())
+		{
+			int networkID = manager.getConnectionInfo().getNetworkId();
+			manager.disconnect();
+			boolean success = manager.removeNetwork(networkID);
+			manager.saveConfiguration();
+		}
 	}
 }
